@@ -148,10 +148,20 @@ if st.session_state.portafolio.opciones:
         st.success(f'Opción {eliminar_opcion} eliminada del portafolio.')
 
 # Barra lateral para guardar y cargar el portafolio
+#st.sidebar.header('Guardar/Cargar Portafolio')
+#if st.sidebar.button('Guardar Portafolio'):
+ #   st.session_state.portafolio.guardar_portafolio('portafolio_opciones.csv')
+ #   st.sidebar.success('Portafolio guardado como "portafolio_opciones.csv".')
+
 st.sidebar.header('Guardar/Cargar Portafolio')
-if st.sidebar.button('Guardar Portafolio'):
-    st.session_state.portafolio.guardar_portafolio('portafolio_opciones.csv')
-    st.sidebar.success('Portafolio guardado como "portafolio_opciones.csv".')
+if st.sidebar.button('Descargar Portafolio'):
+    csv = st.session_state.portafolio.guardar_portafolio()  # Generar el CSV como bytes
+    st.sidebar.download_button(
+        label="Descargar archivo CSV",
+        data=csv,
+        file_name='portafolio_opciones.csv',
+        mime='text/csv'
+    )
 
 # Cargar el portafolio
 uploaded_file = st.sidebar.file_uploader("Cargar portafolio", type=["csv"])
