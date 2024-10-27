@@ -76,7 +76,7 @@ class Portafolio:
 
         return pnl_total_bs
 
-    def guardar_portafolio(self, filename):
+    def guardar_portafolio(self):
         opciones_data = {
             'Tipo': [opcion.tipo for opcion in self.opciones],
             'Operacion': [opcion.operacion for opcion in self.opciones],
@@ -85,7 +85,7 @@ class Portafolio:
             'Cantidad': [opcion.cantidad for opcion in self.opciones]
         }
         df = pd.DataFrame(opciones_data)
-        df.to_csv(filename, index=False)
+        return df.to_csv(index=False).encode('utf-8')  # Retornar el CSV como bytes
 
     def cargar_portafolio(self, filename):
         df = pd.read_csv(filename)
@@ -155,7 +155,7 @@ if st.session_state.portafolio.opciones:
 
 st.sidebar.header('Guardar/Cargar Portafolio')
 if st.sidebar.button('Descargar Portafolio'):
-    csv = st.session_state.portafolio.guardar_portafolio('portafolio_opciones.csv')  # Generar el CSV como bytes
+    csv = st.session_state.portafolio.guardar_portafolio()  # Generar el CSV como bytes
     st.sidebar.download_button(
         label="Descargar archivo CSV",
         data=csv,
