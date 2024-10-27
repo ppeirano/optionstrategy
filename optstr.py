@@ -103,7 +103,7 @@ if 'portafolio' not in st.session_state:
 # Barra lateral para obtener parámetros de entrada del usuario
 st.sidebar.header('Parámetros del Portafolio')
 subyacente = st.sidebar.text_input('Símbolo del Subyacente', value='GGAL.BA')
-tasa_libre_riesgo = st.sidebar.number_input('Tasa libre de riesgo (%)', min_value=0.0, max_value=100.0, value=1.0) / 100
+tasa_libre_riesgo = st.sidebar.number_input('Tasa libre de riesgo (%)', min_value=0.0, max_value=100.0, value=0.38) / 100
 volatilidad = st.sidebar.number_input('Volatilidad histórica anualizada (σ)', min_value=0.0, max_value=1.0, value=0.55)
 fecha_ejercicio = st.sidebar.date_input('Fecha de ejercicio', pd.Timestamp.now().date())
 
