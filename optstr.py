@@ -145,7 +145,20 @@ if st.session_state.portafolio.opciones:
     if st.button('Eliminar Opción'):
         index_to_delete = int(eliminar_opcion.split(':')[0]) - 1  # Extraer el índice
         st.session_state.portafolio.eliminar_opcion(index_to_delete)
+
+        # Actualizar la tabla después de eliminar
         st.success(f'Opción {eliminar_opcion} eliminada del portafolio.')
+        
+        # Mostrar nuevamente las opciones después de eliminar
+        opciones_data = {
+            'Tipo': [opcion.tipo for opcion in st.session_state.portafolio.opciones],
+            'Operación': [opcion.operacion for opcion in st.session_state.portafolio.opciones],
+            'Strike': [opcion.strike for opcion in st.session_state.portafolio.opciones],
+            'Prima': [opcion.prima for opcion in st.session_state.portafolio.opciones],
+            'Cantidad': [opcion.cantidad for opcion in st.session_state.portafolio.opciones]
+        }
+        df_opciones = pd.DataFrame(opciones_data)
+        st.dataframe(df_opciones)
 
 # Barra lateral para guardar y cargar el portafolio
 #st.sidebar.header('Guardar/Cargar Portafolio')
