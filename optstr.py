@@ -103,9 +103,14 @@ if 'portafolio' not in st.session_state:
 # Barra lateral para obtener parámetros de entrada del usuario
 st.sidebar.header('Parámetros del Portafolio')
 subyacente = st.sidebar.text_input('Símbolo del Subyacente', value='GGAL.BA')
-tasa_libre_riesgo = st.sidebar.number_input('Tasa libre de riesgo (%)', min_value=0.0, max_value=100.0, value=0.38) / 100
+tasa_libre_riesgo = st.sidebar.number_input('Tasa libre de riesgo (%)', min_value=0.0, max_value=100.0, value=1.0) / 100
 volatilidad = st.sidebar.number_input('Volatilidad histórica anualizada (σ)', min_value=0.0, max_value=1.0, value=0.55)
 fecha_ejercicio = st.sidebar.date_input('Fecha de ejercicio', pd.Timestamp.now().date())
+
+# Inputs para modificar el rango del precio del subyacente
+st.sidebar.header('Rango de Precios del Subyacente')
+precio_min = st.sidebar.number_input('Precio Mínimo', value=0.8)  # Valor por defecto (80%)
+precio_max = st.sidebar.number_input('Precio Máximo', value=1.2)  # Valor por defecto (120%)
 
 # Sección para cargar opciones manualmente
 st.sidebar.header('Agregar Opción')
@@ -113,7 +118,7 @@ tipo_opcion = st.sidebar.selectbox('Tipo de Opción', ['Call', 'Put'])
 operacion_opcion = st.sidebar.selectbox('Operación', ['Comprada', 'Vendida'])
 strike = st.sidebar.number_input('Strike Price', min_value=0.0, value=100.0)
 prima = st.sidebar.number_input('Prima', min_value=0.0, value=5.0)
-cantidad = st.sidebar.number_input('Cantidad Lotes', min_value=1, value=1)
+cantidad = st.sidebar.number_input('Cantidad', min_value=1, value=1)
 
 # Botón para agregar opción al portafolio
 if st.sidebar.button('Agregar Opción'):
@@ -170,8 +175,10 @@ activo = yf.Ticker(subyacente)
 precio_actual_subyacente = activo.history(period="1d")['Close'].iloc[-1]
 st.write(f'Precio actual de {subyacente}: ${precio_actual_subyacente:.2f}')
 
-# Rango de precios del subyacente para el gráfico
-precios_subyacente = np.linspace(0.8 * precio_actual_subyacente, 1.2 * precio_actual_subyacente, 100)
+# Calcular los precios del subyacente según el rango definido
+precio_min = precio_actual_subyacente * precio_min 
+precio_max = precio_actual_subyacente * precio_max
+precios_subyacente = np.linspace(precio_min, precio_max, 100)
 
 # Calcular el P&L total del portafolio
 pnl_teorico_total = st.session_state.portafolio.calcular_pnl_total(precios_subyacente)
@@ -186,9 +193,19 @@ plt.plot(precios_subyacente, pnl_teorico_total, label='P&L Teórico del Portafol
 plt.plot(precios_subyacente, pnl_bs_total, label='P&L del Portafolio (Black-Scholes)', color='green', linestyle='--')
 plt.axhline(0, color='red', linestyle='--', label='Break-even')
 plt.axvline(precio_actual_subyacente, color='purple', linestyle='--', label='Precio Actual del Subyacente')
-plt.title('P&L deL Portafolio')
+plt.title('P&L de un Portafolio: Call y Put')
 plt.xlabel('Precio del Subyacente')
 plt.ylabel('P&L')
 plt.legend()
 plt.grid(True)
 st.pyplot(plt)
+
+# Tabla de P&L
+pnl_table_data = {
+    'Precio del Subyacente': precios_subyacente,
+    'P&L Teórico': pnl_teorico_total,
+    'P&L Black-Scholes': pnl_bs_total
+}
+df_pnl_table = pd.DataFrame(pnl_table_data)
+st.subheader('Tabla de P&L')
+st.dataframe(df_pnl_table)
