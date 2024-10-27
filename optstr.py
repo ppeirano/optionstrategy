@@ -186,7 +186,7 @@ plt.plot(precios_subyacente, pnl_teorico_total, label='P&L Teórico del Portafol
 plt.plot(precios_subyacente, pnl_bs_total, label='P&L del Portafolio (Black-Scholes)', color='green', linestyle='--')
 plt.axhline(0, color='red', linestyle='--', label='Break-even')
 plt.axvline(precio_actual_subyacente, color='purple', linestyle='--', label='Precio Actual del Subyacente')
-plt.title('P&L de un Portafolio: Call y Put')
+plt.title('P&L deL Portafolio')
 plt.xlabel('Precio del Subyacente')
 plt.ylabel('P&L')
 plt.legend()
