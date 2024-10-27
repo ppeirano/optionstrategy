@@ -155,7 +155,7 @@ if st.session_state.portafolio.opciones:
 
 st.sidebar.header('Guardar/Cargar Portafolio')
 if st.sidebar.button('Descargar Portafolio'):
-    csv = st.session_state.portafolio.guardar_portafolio()  # Generar el CSV como bytes
+    csv = st.session_state.portafolio.guardar_portafolio('portafolio_opciones.csv')  # Generar el CSV como bytes
     st.sidebar.download_button(
         label="Descargar archivo CSV",
         data=csv,
