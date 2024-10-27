@@ -91,7 +91,7 @@ class Portafolio:
         df = pd.read_csv(filename)
         self.opciones = []
         for _, row in df.iterrows():
-            self.agregar_opcion(Opcion(row['Tipo'], row['Operacion'], row['Strike'], row['Prima'], row['Cantidad']))
+            self.agregar_opcion(Opcion(row['Tipo'], row['Operacion'], row['Strike'], row['Prima'], row['Cantidad']/100))
 
 # Interfaz de usuario de Streamlit
 st.title('Monitoreo de Opciones y Portafolio')
