@@ -108,7 +108,7 @@ volatilidad = st.sidebar.number_input('Volatilidad histórica anualizada (σ)', 
 fecha_ejercicio = st.sidebar.date_input('Fecha de ejercicio', pd.Timestamp.now().date())
 
 # Inputs para modificar el rango del precio del subyacente
-st.sidebar.header('Rango de Precios del Subyacente')
+st.sidebar.header('Rango de Precios')
 precio_min = st.sidebar.number_input('Precio Mínimo', value=0.8)  # Valor por defecto (80%)
 precio_max = st.sidebar.number_input('Precio Máximo', value=1.2)  # Valor por defecto (120%)
 
