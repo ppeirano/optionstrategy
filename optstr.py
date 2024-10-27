@@ -146,10 +146,9 @@ if st.session_state.portafolio.opciones:
         index_to_delete = int(eliminar_opcion.split(':')[0]) - 1  # Extraer el índice
         st.session_state.portafolio.eliminar_opcion(index_to_delete)
 
-        # Actualizar la tabla después de eliminar
+        # Mensaje de éxito y actualización de la tabla
         st.success(f'Opción {eliminar_opcion} eliminada del portafolio.')
-        
-        # Mostrar nuevamente las opciones después de eliminar
+        # Se renderiza nuevamente la tabla después de eliminar
         opciones_data = {
             'Tipo': [opcion.tipo for opcion in st.session_state.portafolio.opciones],
             'Operación': [opcion.operacion for opcion in st.session_state.portafolio.opciones],
@@ -159,13 +158,10 @@ if st.session_state.portafolio.opciones:
         }
         df_opciones = pd.DataFrame(opciones_data)
         st.dataframe(df_opciones)
+else:
+    st.write("No hay opciones en el portafolio.")
 
 # Barra lateral para guardar y cargar el portafolio
-#st.sidebar.header('Guardar/Cargar Portafolio')
-#if st.sidebar.button('Guardar Portafolio'):
- #   st.session_state.portafolio.guardar_portafolio('portafolio_opciones.csv')
- #   st.sidebar.success('Portafolio guardado como "portafolio_opciones.csv".')
-
 st.sidebar.header('Guardar/Cargar Portafolio')
 if st.sidebar.button('Descargar Portafolio'):
     csv = st.session_state.portafolio.guardar_portafolio()  # Generar el CSV como bytes
