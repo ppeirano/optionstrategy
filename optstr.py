@@ -1,230 +1,192 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
-import yfinance as yf
-import matplotlib.pyplot as plt
+import pandas as pd
 from scipy.stats import norm
+import plotly.graph_objects as go
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
-# Clase para representar una opción
-class Opcion:
-    def __init__(self, tipo, operacion, strike, prima, cantidad):
-        self.tipo = tipo  # 'Call' o 'Put'
-        self.operacion = operacion  # 'Comprada' o 'Vendida'
-        self.strike = strike  # Precio de ejercicio
-        self.prima = prima  # Prima pagada o recibida
-        self.cantidad = cantidad*100  # Cantidad de opciones
+# --- Función para calcular griegas ---
+def calcular_griegas(portafolio, S_range, r, sigma, T):
+    delta_total = np.zeros_like(S_range)
+    theta_total = np.zeros_like(S_range)
 
-    def calcular_pnl(self, S):
-        """Calcula el P&L basado en el tipo de opción y el precio del subyacente."""
-        if self.tipo == 'Call':
-            if self.operacion == 'Comprada':
-                pnl = np.maximum(0, S - self.strike) - self.prima  # P&L de una opción call comprada
-            else:  # 'Vendida'
-                pnl = self.prima - np.maximum(0, S - self.strike)  # P&L de una opción call vendida
-        else:  # 'Put'
-            if self.operacion == 'Comprada':
-                pnl = np.maximum(0, self.strike - S) - self.prima  # P&L de una opción put comprada
-            else:  # 'Vendida'
-                pnl = self.prima - np.maximum(0, self.strike - S)  # P&L de una opción put vendida
-        return pnl * self.cantidad  # Multiplicar por la cantidad
+    for _, fila in portafolio.iterrows():
+        tipo = fila['tipo']
+        cantidad = fila['cantidad']
+        K = fila['strike']
+        tipo_opcion = fila['tipo_opcion']
 
-    def calcular_pnl_bs(self, S, T, r, sigma):
-        """Calcula el P&L usando Black-Scholes."""
-        d1 = (np.log(S / self.strike) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        d2 = d1 - sigma * np.sqrt(T)
+        if tipo == 'accion':
+            delta_total += cantidad  # Cada acción tiene delta = 1
+        elif tipo == 'opcion' and pd.notna(K):
+            d1 = (np.log(S_range / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+            d2 = d1 - sigma * np.sqrt(T)
 
-        if self.tipo == 'Call':
-            precio_opcion = S * norm.cdf(d1) - self.strike * np.exp(-r * T) * norm.cdf(d2)
-            if self.operacion == 'Comprada':
-                pnl_bs = precio_opcion - self.prima  # Call comprada
-            else:  # 'Vendida'
-                pnl_bs = self.prima - precio_opcion  # Call vendida
-        else:  # 'Put'
-            precio_opcion = self.strike * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-            if self.operacion == 'Comprada':
-                pnl_bs = precio_opcion - self.prima  # Put comprada
-            else:  # 'Vendida'
-                pnl_bs = self.prima - precio_opcion  # Put vendida
-            
-        return pnl_bs * self.cantidad  # Multiplicar por la cantidad
+            if tipo_opcion == 'call':
+                delta = norm.cdf(d1)
+                theta = (- (S_range * norm.pdf(d1) * sigma) / (2 * np.sqrt(T))
+                         - r * K * np.exp(-r * T) * norm.cdf(d2))
+            elif tipo_opcion == 'put':
+                delta = norm.cdf(d1) - 1
+                theta = (- (S_range * norm.pdf(d1) * sigma) / (2 * np.sqrt(T))
+                         + r * K * np.exp(-r * T) * norm.cdf(-d2))
+            else:
+                continue
 
-# Clase para representar el portafolio
-class Portafolio:
-    def __init__(self):
-        self.opciones = []
+            delta_total += cantidad * delta
+            theta_total += (cantidad * theta)/365
 
-    def agregar_opcion(self, opcion):
-        self.opciones.append(opcion)
+    return delta_total, theta_total
 
-    def eliminar_opcion(self, index):
-        if 0 <= index < len(self.opciones):
-            self.opciones.pop(index)
+# --- NUEVA FUNCIONALIDAD: Cálculo de opciones adicionales para Delta Neutral ---
+def calcular_opciones_adicionales_delta_neutral(delta_actual, delta_opcion_existente):
+    if delta_opcion_existente != 0:
+        return -delta_actual / delta_opcion_existente
+    else:
+        return np.nan
 
-    def calcular_pnl_total(self, precios_subyacente):
-        pnl_total = np.zeros_like(precios_subyacente)
+# --- UI Streamlit ---
+st.title("Análisis Interactivo de Griegas")
 
-        for opcion in self.opciones:
-            pnl_total += opcion.calcular_pnl(precios_subyacente)
+st.sidebar.header("Parámetros del Mercado")
+S_actual = st.sidebar.number_input("Precio actual del subyacente (S)", value=7500.0)
+r = st.sidebar.number_input("Tasa libre de riesgo (%)", value=29.5) / 100
+sigma = st.sidebar.number_input("Volatilidad (%)", value=57.0) / 100
+dias = st.sidebar.number_input("Días al vencimiento", value=26)
+T = dias / 365
 
-        return pnl_total
+st.sidebar.markdown("---")
+st.sidebar.write("Rango de precios para análisis")
+S_min = st.sidebar.number_input("Precio mínimo", value=6000.0)
+S_max = st.sidebar.number_input("Precio máximo", value=9000.0)
 
-    def calcular_pnl_total_bs(self, precios_subyacente, T, r, sigma):
-        pnl_total_bs = np.zeros_like(precios_subyacente)
-
-        for opcion in self.opciones:
-            pnl_total_bs += opcion.calcular_pnl_bs(precios_subyacente, T, r, sigma)
-
-        return pnl_total_bs
-
-    def guardar_portafolio(self):
-        opciones_data = {
-            'Tipo': [opcion.tipo for opcion in self.opciones],
-            'Operacion': [opcion.operacion for opcion in self.opciones],
-            'Strike': [opcion.strike for opcion in self.opciones],
-            'Prima': [opcion.prima for opcion in self.opciones],
-            'Cantidad': [opcion.cantidad for opcion in self.opciones]
-        }
-        df = pd.DataFrame(opciones_data)
-        return df.to_csv(index=False).encode('utf-8')  # Retornar el CSV como bytes
-
-    def cargar_portafolio(self, filename):
-        df = pd.read_csv(filename)
-        self.opciones = []
-        for _, row in df.iterrows():
-            self.agregar_opcion(Opcion(row['Tipo'], row['Operacion'], row['Strike'], row['Prima'], row['Cantidad']/100))
-
-# Interfaz de usuario de Streamlit
-st.title('Monitoreo de Opciones y Portafolio')
-
-# Inicializar el portafolio en el estado de sesión si no existe
-if 'portafolio' not in st.session_state:
-    st.session_state.portafolio = Portafolio()
-
-# Barra lateral para obtener parámetros de entrada del usuario
-st.sidebar.header('Parámetros del Portafolio')
-subyacente = st.sidebar.text_input('Símbolo del Subyacente', value='GGAL.BA')
-tasa_libre_riesgo = st.sidebar.number_input('Tasa libre de riesgo (%)', min_value=0.0, max_value=100.0, value=0.38) / 100
-volatilidad = st.sidebar.number_input('Volatilidad histórica anualizada (σ)', min_value=0.0, max_value=1.0, value=0.55)
-fecha_ejercicio = st.sidebar.date_input('Fecha de ejercicio', pd.Timestamp.now().date())
-
-# Inputs para modificar el rango del precio del subyacente
-st.sidebar.header('Rango de Precios')
-precio_min = st.sidebar.number_input('Precio Mínimo', value=0.8)  # Valor por defecto (80%)
-precio_max = st.sidebar.number_input('Precio Máximo', value=1.2)  # Valor por defecto (120%)
-
-# Sección para cargar opciones manualmente
-st.sidebar.header('Agregar Opción')
-tipo_opcion = st.sidebar.selectbox('Tipo de Opción', ['Call', 'Put'])
-operacion_opcion = st.sidebar.selectbox('Operación', ['Comprada', 'Vendida'])
-strike = st.sidebar.number_input('Strike Price', min_value=0.0, value=100.0)
-prima = st.sidebar.number_input('Prima', min_value=0.0, value=5.0)
-cantidad = st.sidebar.number_input('Cantidad', min_value=1, value=1)
-
-# Botón para agregar opción al portafolio
-if st.sidebar.button('Agregar Opción'):
-    st.session_state.portafolio.agregar_opcion(Opcion(tipo_opcion, operacion_opcion, strike, prima, cantidad))
-    st.sidebar.success(f'Opción {operacion_opcion} {tipo_opcion} agregada al portafolio.')
-
-# Mostrar las opciones cargadas en una tabla
-if st.session_state.portafolio.opciones:
-    st.subheader('Opciones en el Portafolio:')
-    opciones_data = {
-        'Tipo': [opcion.tipo for opcion in st.session_state.portafolio.opciones],
-        'Operación': [opcion.operacion for opcion in st.session_state.portafolio.opciones],
-        'Strike': [opcion.strike for opcion in st.session_state.portafolio.opciones],
-        'Prima': [opcion.prima for opcion in st.session_state.portafolio.opciones],
-        'Cantidad': [opcion.cantidad for opcion in st.session_state.portafolio.opciones]
-    }
-    df_opciones = pd.DataFrame(opciones_data)
-    st.dataframe(df_opciones)
-
-    # Opción para eliminar una opción
-    eliminar_opcion = st.selectbox('Selecciona la opción a eliminar', [f"{i + 1}: {opcion.operacion} {opcion.tipo} - Strike: {opcion.strike}" for i, opcion in enumerate(st.session_state.portafolio.opciones)])
+# Portafolio ejemplo
+portafolio = pd.DataFrame({
+    'tipo': ['accion', 'opcion', 'opcion'],
+    'cantidad': [5000, 4000, -19000],
+    'strike': [np.nan, 7578.3, 8578.3],
+    'tipo_opcion': [None, 'call', 'call'],
     
-    # Botón para eliminar la opción seleccionada
-    if st.button('Eliminar Opción'):
-        index_to_delete = int(eliminar_opcion.split(':')[0]) - 1  # Extraer el índice
-        st.session_state.portafolio.eliminar_opcion(index_to_delete)
+})
 
-        # Mensaje de éxito y actualización de la tabla
-        st.success(f'Opción {eliminar_opcion} eliminada del portafolio.')
-        # Se renderiza nuevamente la tabla después de eliminar
-        opciones_data = {
-            'Tipo': [opcion.tipo for opcion in st.session_state.portafolio.opciones],
-            'Operación': [opcion.operacion for opcion in st.session_state.portafolio.opciones],
-            'Strike': [opcion.strike for opcion in st.session_state.portafolio.opciones],
-            'Prima': [opcion.prima for opcion in st.session_state.portafolio.opciones],
-            'Cantidad': [opcion.cantidad for opcion in st.session_state.portafolio.opciones]
-        }
-        df_opciones = pd.DataFrame(opciones_data)
-        st.dataframe(df_opciones)
-else:
-    st.write("No hay opciones en el portafolio.")
+# Calcular griegas individuales y agregarlas al portafolio antes de mostrar
+deltas = []
+gammas = []
+thetas = []
+vegas = []
+delta_unit = []
+gamma_unit = []
+theta_unit = []
+vega_unit = []
+precios_actuales_calculados = []
 
-# Barra lateral para guardar y cargar el portafolio
-st.sidebar.header('Guardar/Cargar Portafolio')
-if st.sidebar.button('Descargar Portafolio'):
-    csv = st.session_state.portafolio.guardar_portafolio()  # Generar el CSV como bytes
-    st.sidebar.download_button(
-        label="Descargar archivo CSV",
-        data=csv,
-        file_name='portafolio_opciones.csv',
-        mime='text/csv'
-    )
+for _, fila in portafolio.iterrows():
+    tipo = fila['tipo']
+    cantidad = fila['cantidad']
+    K = fila['strike']
+    tipo_opcion = fila['tipo_opcion']
 
-# Cargar el portafolio
-uploaded_file = st.sidebar.file_uploader("Cargar portafolio", type=["csv"])
-if uploaded_file is not None:
-    st.session_state.portafolio.cargar_portafolio(uploaded_file)
-    st.success('Portafolio cargado con éxito.')
+    if tipo == 'accion':
+        du = 1
+        gu = 0
+        tu = 0
+        vu = 0
+        pc = 0
+    elif tipo == 'opcion' and pd.notna(K):
+        d1 = (np.log(S_actual / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+        d2 = d1 - sigma * np.sqrt(T)
+        gu = norm.pdf(d1) / (S_actual * sigma * np.sqrt(T))
+        vu = (S_actual * norm.pdf(d1) * np.sqrt(T)) / 100
 
-    # Mostrar las opciones cargadas después de cargar el archivo
-    opciones_data = {
-        'Tipo': [opcion.tipo for opcion in st.session_state.portafolio.opciones],
-        'Operación': [opcion.operacion for opcion in st.session_state.portafolio.opciones],
-        'Strike': [opcion.strike for opcion in st.session_state.portafolio.opciones],
-        'Prima': [opcion.prima for opcion in st.session_state.portafolio.opciones],
-        'Cantidad': [opcion.cantidad for opcion in st.session_state.portafolio.opciones]
-    }
-    df_opciones = pd.DataFrame(opciones_data)
-    st.dataframe(df_opciones)
+        if tipo_opcion == 'call':
+            du = norm.cdf(d1)
+            tu = ((- (S_actual * norm.pdf(d1) * sigma) / (2 * np.sqrt(T)) - r * K * np.exp(-r * T) * norm.cdf(d2)) / 365)
+            pc = S_actual * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+        elif tipo_opcion == 'put':
+            du = norm.cdf(d1) - 1
+            tu = ((- (S_actual * norm.pdf(d1) * sigma) / (2 * np.sqrt(T)) + r * K * np.exp(-r * T) * norm.cdf(-d2)) / 365)
+            pc = K * np.exp(-r * T) * norm.cdf(-d2) - S_actual * norm.cdf(-d1)
+        else:
+            du = tu = gu = vu = pc = 0
+    else:
+        du = tu = gu = vu = pc = 0
 
-# Obtener el precio actual del subyacente
-activo = yf.Ticker(subyacente)
-precio_actual_subyacente = activo.history(period="1d")['Close'].iloc[-1]
-st.write(f'Precio actual de {subyacente}: ${precio_actual_subyacente:.2f}')
+    delta_unit.append(du)
+    gamma_unit.append(gu)
+    theta_unit.append(tu)
+    vega_unit.append(vu)
+    deltas.append(du * cantidad)
+    gammas.append(gu * cantidad)
+    thetas.append(tu * cantidad)
+    vegas.append(vu * cantidad)
+    precios_actuales_calculados.append(pc)
 
-# Calcular los precios del subyacente según el rango definido
-precio_min = precio_actual_subyacente * precio_min 
-precio_max = precio_actual_subyacente * precio_max
-precios_subyacente = np.linspace(precio_min, precio_max, 100)
+portafolio['Delta Unitario'] = delta_unit
+portafolio['Gamma Unitario'] = gamma_unit
+portafolio['Theta Unitario'] = theta_unit
+portafolio['Vega Unitario'] = vega_unit
+portafolio['Delta'] = deltas
+portafolio['Gamma'] = gammas
+portafolio['Theta'] = thetas
+portafolio['Vega'] = vegas
 
-# Calcular el P&L total del portafolio
-pnl_teorico_total = st.session_state.portafolio.calcular_pnl_total(precios_subyacente)
+st.header("Portafolio")
+st.data_editor(portafolio, num_rows="dynamic", use_container_width=True)
 
-# Calcular el P&L total usando Black-Scholes
-T = (pd.to_datetime(fecha_ejercicio) - pd.Timestamp.now()).days / 365  # Convertir a años
-pnl_bs_total = st.session_state.portafolio.calcular_pnl_total_bs(precios_subyacente, T, tasa_libre_riesgo, volatilidad)
+# Cálculo para gráfico
+S_range = np.linspace(S_min, S_max, 100)
+delta_total, theta_total = calcular_griegas(portafolio, S_range, r, sigma, T)
 
-# Graficar ambos P&L
-plt.figure(figsize=(10, 6))
-plt.plot(precios_subyacente, pnl_teorico_total, label='P&L Teórico del Portafolio', color='blue')
-plt.plot(precios_subyacente, pnl_bs_total, label='P&L del Portafolio (Black-Scholes)', color='green', linestyle='--')
-plt.axhline(0, color='red', linestyle='--', label='Break-even')
-plt.axvline(precio_actual_subyacente, color='purple', linestyle='--', label='Precio Actual del Subyacente')
-plt.title('P&L de un Portafolio: Call y Put')
-plt.xlabel('Precio del Subyacente')
-plt.ylabel('P&L')
-plt.legend()
-plt.grid(True)
-st.pyplot(plt)
+# Gráfico 3D
+norm = mcolors.Normalize(vmin=min(theta_total), vmax=max(theta_total))
+colors = [mcolors.to_hex(cm.viridis(norm(val))) for val in theta_total]
 
-# Tabla de P&L
-pnl_table_data = {
-    'Precio del Subyacente': precios_subyacente,
-    'P&L Teórico': pnl_teorico_total,
-    'P&L Black-Scholes': pnl_bs_total
-}
-df_pnl_table = pd.DataFrame(pnl_table_data)
-st.subheader('Tabla de P&L')
-st.dataframe(df_pnl_table)
+fig = go.Figure()
+fig.add_trace(go.Scatter3d(
+    x=S_range,
+    y=delta_total,
+    z=theta_total,
+    mode='lines+markers',
+    marker=dict(size=4, color=colors),
+    line=dict(color='grey'),
+    name='Delta vs Theta en función de S'
+))
+
+# Punto actual con etiqueta
+delta_actual_punto = np.interp(S_actual, S_range, delta_total)
+theta_actual_punto = np.interp(S_actual, S_range, theta_total)
+fig.add_trace(go.Scatter3d(
+    x=[S_actual],
+    y=[delta_actual_punto],
+    z=[theta_actual_punto],
+    mode='markers+text',
+    marker=dict(size=6, color='red', symbol='diamond'),
+    text=[f"S={S_actual}<br>Δ={delta_actual_punto:.2f}<br>Θ={theta_actual_punto:.2f}"],
+    textposition='top center',
+    name='Punto Actual'
+))
+
+fig.update_layout(
+    title="Relación Delta y Theta del Portafolio según Precio Subyacente",
+    scene=dict(
+        xaxis_title='Precio Subyacente',
+        yaxis_title='Delta',
+        zaxis_title='Theta',
+    ),
+    height=700
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# Mostrar griegas totales del portafolio
+st.subheader("Totales del Portafolio")
+total_delta = portafolio['Delta'].sum()
+total_gamma = portafolio['Gamma'].sum()
+total_theta = portafolio['Theta'].sum()
+total_vega = portafolio['Vega'].sum()
+
+st.markdown(f"**Delta total:** {total_delta:.2f}")
+st.markdown(f"**Gamma total:** {total_gamma:.2f}")
+st.markdown(f"**Theta total:** {total_theta:.2f}")
+st.markdown(f"**Vega total:** {total_vega:.2f}")
