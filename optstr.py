@@ -39,15 +39,8 @@ def calcular_griegas(portafolio, S_range, r, sigma, T):
 
     return delta_total, theta_total
 
-# --- NUEVA FUNCIONALIDAD: Cálculo de opciones adicionales para Delta Neutral ---
-def calcular_opciones_adicionales_delta_neutral(delta_actual, delta_opcion_existente):
-    if delta_opcion_existente != 0:
-        return -delta_actual / delta_opcion_existente
-    else:
-        return np.nan
-
 # --- UI Streamlit ---
-st.title("Análisis Interactivo de Griegas")
+st.title("Análisis Interactivo de Griegas con Plotly")
 
 st.sidebar.header("Parámetros del Mercado")
 S_actual = st.sidebar.number_input("Precio actual del subyacente (S)", value=7500.0)
@@ -57,29 +50,29 @@ dias = st.sidebar.number_input("Días al vencimiento", value=26)
 T = dias / 365
 
 st.sidebar.markdown("---")
-st.sidebar.write("Rango de precios para análisis")
 S_min = st.sidebar.number_input("Precio mínimo", value=6000.0)
 S_max = st.sidebar.number_input("Precio máximo", value=9000.0)
 
-# Portafolio ejemplo
-portafolio = pd.DataFrame({
+# Portafolio editable
+ejemplo = pd.DataFrame({
     'tipo': ['accion', 'opcion', 'opcion'],
     'cantidad': [5000, 4000, -19000],
     'strike': [np.nan, 7578.3, 8578.3],
-    'tipo_opcion': [None, 'call', 'call'],
-    
+    'tipo_opcion': [None, 'call', 'call']
 })
 
-# Calcular griegas individuales y agregarlas al portafolio antes de mostrar
-deltas = []
-gammas = []
-thetas = []
-vegas = []
-delta_unit = []
-gamma_unit = []
-theta_unit = []
-vega_unit = []
-precios_actuales_calculados = []
+st.header("Cargar Portafolio")
+portafolio = st.data_editor(ejemplo, num_rows="dynamic", use_container_width=True)
+
+# Calcular griegas individuales actualizadas
+updated_deltas = []
+updated_gammas = []
+updated_thetas = []
+updated_vegas = []
+updated_delta_unit = []
+updated_gamma_unit = []
+updated_theta_unit = []
+updated_vega_unit = []
 
 for _, fila in portafolio.iterrows():
     tipo = fila['tipo']
@@ -88,11 +81,7 @@ for _, fila in portafolio.iterrows():
     tipo_opcion = fila['tipo_opcion']
 
     if tipo == 'accion':
-        du = 1
-        gu = 0
-        tu = 0
-        vu = 0
-        pc = 0
+        du, gu, tu, vu = 1, 0, 0, 0
     elif tipo == 'opcion' and pd.notna(K):
         d1 = (np.log(S_actual / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
         d2 = d1 - sigma * np.sqrt(T)
@@ -102,39 +91,33 @@ for _, fila in portafolio.iterrows():
         if tipo_opcion == 'call':
             du = norm.cdf(d1)
             tu = ((- (S_actual * norm.pdf(d1) * sigma) / (2 * np.sqrt(T)) - r * K * np.exp(-r * T) * norm.cdf(d2)) / 365)
-            pc = S_actual * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
         elif tipo_opcion == 'put':
             du = norm.cdf(d1) - 1
             tu = ((- (S_actual * norm.pdf(d1) * sigma) / (2 * np.sqrt(T)) + r * K * np.exp(-r * T) * norm.cdf(-d2)) / 365)
-            pc = K * np.exp(-r * T) * norm.cdf(-d2) - S_actual * norm.cdf(-d1)
         else:
-            du = tu = gu = vu = pc = 0
+            du = tu = gu = vu = 0
     else:
-        du = tu = gu = vu = pc = 0
+        du = tu = gu = vu = 0
 
-    delta_unit.append(du)
-    gamma_unit.append(gu)
-    theta_unit.append(tu)
-    vega_unit.append(vu)
-    deltas.append(du * cantidad)
-    gammas.append(gu * cantidad)
-    thetas.append(tu * cantidad)
-    vegas.append(vu * cantidad)
-    precios_actuales_calculados.append(pc)
+    updated_delta_unit.append(du)
+    updated_gamma_unit.append(gu)
+    updated_theta_unit.append(tu)
+    updated_vega_unit.append(vu)
+    updated_deltas.append(du * cantidad)
+    updated_gammas.append(gu * cantidad)
+    updated_thetas.append(tu * cantidad)
+    updated_vegas.append(vu * cantidad)
 
-portafolio['Delta Unitario'] = delta_unit
-portafolio['Gamma Unitario'] = gamma_unit
-portafolio['Theta Unitario'] = theta_unit
-portafolio['Vega Unitario'] = vega_unit
-portafolio['Delta'] = deltas
-portafolio['Gamma'] = gammas
-portafolio['Theta'] = thetas
-portafolio['Vega'] = vegas
+portafolio['Delta Unitario'] = updated_delta_unit
+portafolio['Gamma Unitario'] = updated_gamma_unit
+portafolio['Theta Unitario'] = updated_theta_unit
+portafolio['Vega Unitario'] = updated_vega_unit
+portafolio['Delta'] = updated_deltas
+portafolio['Gamma'] = updated_gammas
+portafolio['Theta'] = updated_thetas
+portafolio['Vega'] = updated_vegas
 
-st.header("Portafolio")
-st.data_editor(portafolio, num_rows="dynamic", use_container_width=True)
-
-# Cálculo para gráfico
+# Cálculo para gráfico actualizado
 S_range = np.linspace(S_min, S_max, 100)
 delta_total, theta_total = calcular_griegas(portafolio, S_range, r, sigma, T)
 
@@ -180,7 +163,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # Mostrar griegas totales del portafolio
-st.subheader("Totales del Portafolio")
+st.subheader("Griegas Totales del Portafolio")
 total_delta = portafolio['Delta'].sum()
 total_gamma = portafolio['Gamma'].sum()
 total_theta = portafolio['Theta'].sum()
